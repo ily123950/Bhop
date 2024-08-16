@@ -1,9 +1,8 @@
+loadstring(game:HttpGet('https://raw.githubusercontent.com/ily123950/Rrr/main/Shiftlock'))()
+
 local player = game.Players.LocalPlayer
 local camera = workspace.CurrentCamera
-
-player.CameraMaxZoomDistance = 0
-player.CameraMinZoomDistance = 0
-
+--settings
 local baseAcceleration = 10
 local accelerationIncrement = 1
 local maxAcceleration = 80

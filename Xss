@@ -1,0 +1,116 @@
+local player = game.Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+player.CameraMaxZoomDistance = 0
+player.CameraMinZoomDistance = 0
+
+local baseAcceleration = 10
+local accelerationIncrement = 1
+local maxAcceleration = 80
+local isJumping = false
+local isBhopActive = false
+local speedDecay = 0.98
+local minSpeed = 1
+local currentSpeed = 0
+local lastJumpTime = 0
+local speedResetTimer = nil
+
+local function getYawAngle(cframe)
+    local _, y, _ = cframe:ToEulerAnglesYXZ()
+    return y
+end
+
+local function interpolateAngle(from, to, alpha)
+    return from + (to - from) * alpha
+end
+
+local previousYaw = getYawAngle(camera.CFrame)
+
+local function onJump()
+    isJumping = true
+    lastJumpTime = tick()
+
+    if speedResetTimer then
+        speedResetTimer:Disconnect()
+        speedResetTimer = nil
+    end
+end
+
+local function onRenderStep()
+    local character = player.Character
+    if character and character:FindFirstChild("HumanoidRootPart") then
+        local hrp = character.HumanoidRootPart
+        local velocity = hrp.Velocity
+        local isOnGround = character:FindFirstChild("Humanoid") and character.Humanoid:GetState() ~= Enum.HumanoidStateType.Freefall
+
+        if isJumping and not isOnGround then
+            local isMoving = math.abs(velocity.X) > 0.1 or math.abs(velocity.Z) > 0.1
+            local currentYaw = getYawAngle(camera.CFrame)
+            local smoothedYaw = interpolateAngle(previousYaw, currentYaw, 0.1)
+            local deltaYaw = math.deg(smoothedYaw - previousYaw)
+
+            if math.abs(deltaYaw) > 1 and isMoving then
+                isBhopActive = true
+
+                if baseAcceleration < maxAcceleration then
+                    baseAcceleration = baseAcceleration + accelerationIncrement
+                end
+
+                local angleBasedAcceleration = baseAcceleration + math.abs(deltaYaw)
+                local controlDirection = camera.CFrame.LookVector * angleBasedAcceleration
+
+                currentSpeed = math.sqrt(controlDirection.X^2 + controlDirection.Z^2)
+                hrp.Velocity = Vector3.new(controlDirection.X, velocity.Y, controlDirection.Z)
+            end
+
+            previousYaw = smoothedYaw
+        else
+            local speed = math.sqrt(velocity.X^2 + velocity.Z^2)
+            if speed > minSpeed then
+                currentSpeed = currentSpeed * speedDecay
+                if currentSpeed < minSpeed then
+                    currentSpeed = minSpeed
+                end
+                local newVelocityX = velocity.X * (currentSpeed / speed)
+                local newVelocityZ = velocity.Z * (currentSpeed / speed)
+                hrp.Velocity = Vector3.new(newVelocityX, velocity.Y, newVelocityZ)
+            else
+                currentSpeed = minSpeed
+            end
+        end
+    end
+end
+
+local function onCharacterAdded(character)
+    local humanoid = character:WaitForChild("Humanoid")
+
+    previousYaw = getYawAngle(camera.CFrame)
+
+    humanoid.Jumping:Connect(onJump)
+    game:GetService("RunService").RenderStepped:Connect(onRenderStep)
+
+    humanoid.StateChanged:Connect(function(_, newState)
+        if newState == Enum.HumanoidStateType.Landed then
+            isJumping = false
+
+            speedResetTimer = game:GetService("RunService").Stepped:Connect(function()
+                if tick() - lastJumpTime >= 0.7 then
+                    baseAcceleration = 10
+                    previousYaw = getYawAngle(camera.CFrame)
+                    isBhopActive = false
+                    speedResetTimer:Disconnect()
+                    speedResetTimer = nil
+                end
+            end)
+        elseif newState == Enum.HumanoidStateType.Seated then
+            baseAcceleration = 10
+            isBhopActive = false
+        end
+    end)
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+
+if player.Character then
+    onCharacterAdded(player.Character)
+end
